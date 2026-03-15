@@ -58,7 +58,10 @@ type LayoutConfig = {
 type UINode = {
   type: string;
   inputs?: Record<string, unknown>;
-  outputs?: Record<string, string>;
+  outputs?: {
+    action: string;
+    message?: string;
+  };
   children?: UINode[];
   layout?: LayoutConfig;
 };
@@ -70,6 +73,7 @@ type UISchema = {
 const modelName = 'gemini-2.0-flash';
 
 const ALLOWED_TYPES = new Set(['container', 'tag', 'button']);
+const SAFE_ACTION_NAME = /^[a-z][a-z0-9-]{1,39}$/;
 
 const shouldGenerateUi = (prompt: string): boolean => {
   const value = prompt.toLowerCase();
@@ -122,6 +126,19 @@ const sanitizeNode = (node: unknown, depth = 0): UINode | null => {
 
   if (candidate['inputs'] && typeof candidate['inputs'] === 'object') {
     sanitized.inputs = candidate['inputs'] as Record<string, unknown>;
+  }
+
+  if (type === 'button' && candidate['outputs'] && typeof candidate['outputs'] === 'object') {
+    const rawOutputs = candidate['outputs'] as Record<string, unknown>;
+    const action = typeof rawOutputs['action'] === 'string' ? rawOutputs['action'].trim().toLowerCase() : '';
+    if (action && SAFE_ACTION_NAME.test(action)) {
+      const output: UINode['outputs'] = { action };
+      const message = typeof rawOutputs['message'] === 'string' ? rawOutputs['message'].trim() : '';
+      if (message) {
+        output.message = message.slice(0, 300);
+      }
+      sanitized.outputs = output;
+    }
   }
 
   if (Object.keys(layout).length > 0) {
@@ -177,11 +194,13 @@ const generateUiSchema = async (input: ChatFlowInput, assistantText: string): Pr
 
   const uiPrompt = [
     'Return ONLY JSON with this exact shape: {"root": UINode}.',
-    'UINode fields: type, inputs, children, layout. No markdown, no prose.',
+    'UINode fields: type, inputs, outputs, children, layout. No markdown, no prose.',
     'Allowed type values: container, tag, button.',
     'Allowed layout: direction (row|column), gap (css string), columns (number).',
     'For tag: inputs {"text": string, "tone": "neutral"|"success"|"warning"}.',
-    'For button: inputs {"label": string}.',
+    'For button: inputs {"label": string}, optional outputs {"action": "kebab-case-action", "message": string}.',
+    'If button should log text in browser console, use outputs {"action": "log-console", "message": "..."}.',
+    'Only use button outputs.action when a follow-up action is useful.',
     'Prefer compact, useful UI for the assistant response.',
     historyText ? `Conversation:\n${historyText}` : '',
     `User prompt: ${input.prompt}`,

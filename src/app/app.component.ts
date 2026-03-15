@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, HostListener, signal } from '@angular/core';
 import { runFlow, streamFlow } from 'genkit/beta/client';
 import { DynamicRendererComponent } from './components/dynamic-renderer/dynamic-renderer.component';
 import './components/button/button.component';
@@ -21,10 +21,21 @@ type ChatApiResponse = {
   ui?: UISchema;
 };
 
+type UiActionEvent = CustomEvent<{
+  action?: string;
+  message?: string;
+  label?: string;
+}>;
+
 const flowBaseUrl =
   typeof window !== 'undefined'
     ? `${window.location.protocol}//${window.location.hostname}:${window.location.port === '4200' ? '3401' : window.location.port}/api/flows`
     : 'http://localhost:3401/api/flows';
+
+const actionPrompts: Record<string, string> = {
+  'generate-plan': 'Generate a concise launch plan with owners, due dates, and risks.',
+  'publish-result': 'Prepare a final publish confirmation checklist and summary.',
+};
 
 const chooseTree = (intent: AgentIntent): UISchema => {
   if (intent === 'confirm-action') {
@@ -44,6 +55,9 @@ const chooseTree = (intent: AgentIntent): UISchema => {
             type: 'button',
             inputs: {
               label: 'Generate Plan',
+            },
+            outputs: {
+              action: 'generate-plan',
             },
           },
         ],
@@ -78,6 +92,9 @@ const chooseTree = (intent: AgentIntent): UISchema => {
                 type: 'button',
                 inputs: {
                   label: 'Publish Result',
+                },
+                outputs: {
+                  action: 'publish-result',
                 },
               },
             ],
@@ -187,6 +204,22 @@ export class AppComponent {
     },
   ]);
   private nextId = 2;
+
+  @HostListener('window:dynamic-ui-action', ['$event'])
+  protected onDynamicUiAction(event: Event): void {
+    const customEvent = event as UiActionEvent;
+    const action = customEvent.detail?.action?.trim().toLowerCase();
+    if (!action || this.isTyping()) return;
+
+    if (action === 'log-console' || action === 'console-log') {
+      console.log(customEvent.detail?.message?.trim() || customEvent.detail?.label || 'Button action');
+      return;
+    }
+
+    const prompt = actionPrompts[action] ?? `Run action: ${action}`;
+    this.draft.set(prompt);
+    void this.sendMessage();
+  }
 
   protected updateDraft(value: string): void {
     this.draft.set(value);

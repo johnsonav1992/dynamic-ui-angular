@@ -41,6 +41,10 @@ export class DynamicRendererComponent {
       ref.setInput(key, value);
     }
 
+    if (node.type === 'button' && node.outputs) {
+      ref.setInput('outputs', node.outputs);
+    }
+
     if (node.layout) {
       ref.setInput('layout', node.layout);
     }

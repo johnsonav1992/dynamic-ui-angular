@@ -4,10 +4,17 @@ export interface LayoutConfig {
   columns?: number;
 }
 
+export interface ButtonOutputs {
+  action?: string;
+  message?: string;
+}
+
+export type UIOutputs = ButtonOutputs;
+
 export interface UINode {
   type: string;
   inputs?: Record<string, unknown>;
-  outputs?: Record<string, string>;
+  outputs?: UIOutputs;
   children?: UINode[];
   layout?: LayoutConfig;
 }
