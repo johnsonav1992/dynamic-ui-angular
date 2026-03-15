@@ -35,9 +35,129 @@ type ChatFlowInput = {
 type ChatFlowOutput = {
   text: string;
   model: string;
+  ui?: UISchema;
+};
+
+type LayoutConfig = {
+  direction?: 'row' | 'column';
+  gap?: string;
+  columns?: number;
+};
+
+type UINode = {
+  type: string;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, string>;
+  children?: UINode[];
+  layout?: LayoutConfig;
+};
+
+type UISchema = {
+  root: UINode;
 };
 
 const modelName = 'gemini-2.0-flash';
+
+const ALLOWED_TYPES = new Set(['container', 'tag', 'button']);
+
+const extractJsonObject = (text: string): string | null => {
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
+  return text.slice(firstBrace, lastBrace + 1);
+};
+
+const sanitizeNode = (node: unknown, depth = 0): UINode | null => {
+  if (!node || typeof node !== 'object' || depth > 8) return null;
+  const candidate = node as Record<string, unknown>;
+  const type = typeof candidate.type === 'string' ? candidate.type : null;
+  if (!type || !ALLOWED_TYPES.has(type)) return null;
+
+  const layout: LayoutConfig = {};
+  if (candidate.layout && typeof candidate.layout === 'object') {
+    const rawLayout = candidate.layout as Record<string, unknown>;
+    if (rawLayout.direction === 'row' || rawLayout.direction === 'column') {
+      layout.direction = rawLayout.direction;
+    }
+    if (typeof rawLayout.gap === 'string') {
+      layout.gap = rawLayout.gap;
+    }
+    if (typeof rawLayout.columns === 'number' && Number.isFinite(rawLayout.columns)) {
+      layout.columns = Math.max(1, Math.min(4, Math.floor(rawLayout.columns)));
+    }
+  }
+
+  const sanitized: UINode = {
+    type,
+  };
+
+  if (candidate.inputs && typeof candidate.inputs === 'object') {
+    sanitized.inputs = candidate.inputs as Record<string, unknown>;
+  }
+
+  if (Object.keys(layout).length > 0) {
+    sanitized.layout = layout;
+  }
+
+  if (Array.isArray(candidate.children)) {
+    const children = candidate.children
+      .map((child) => sanitizeNode(child, depth + 1))
+      .filter((value): value is UINode => value !== null);
+    if (children.length > 0) sanitized.children = children;
+  }
+
+  return sanitized;
+};
+
+const sanitizeSchema = (value: unknown): UISchema | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const root = sanitizeNode((value as Record<string, unknown>).root);
+  return root ? { root } : undefined;
+};
+
+const generateUiSchema = async (input: ChatFlowInput, assistantText: string): Promise<UISchema | undefined> => {
+  const history = input.history ?? [];
+  const historyText = history
+    .slice(-6)
+    .map((turn) => `${turn.role}: ${turn.content}`)
+    .join('\n');
+
+  const uiPrompt = [
+    'Return ONLY JSON with this exact shape: {"root": UINode}.',
+    'UINode fields: type, inputs, children, layout. No markdown, no prose.',
+    'Allowed type values: container, tag, button.',
+    'Allowed layout: direction (row|column), gap (css string), columns (number).',
+    'For tag: inputs {"text": string, "tone": "neutral"|"success"|"warning"}.',
+    'For button: inputs {"label": string}.',
+    'Prefer compact, useful UI for the assistant response.',
+    historyText ? `Conversation:\n${historyText}` : '',
+    `User prompt: ${input.prompt}`,
+    `Assistant response: ${assistantText}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const { response } = ai.generateStream({
+    model: gemini20Flash,
+    config: { temperature: 0.2 },
+    prompt: uiPrompt,
+  });
+
+  const final = await response;
+  const text = final.text || '';
+  const jsonText = extractJsonObject(text);
+  if (!jsonText) return undefined;
+
+  try {
+    const parsed = JSON.parse(jsonText) as unknown;
+    return sanitizeSchema(parsed);
+  } catch {
+    return undefined;
+  }
+};
 
 const toPrompt = (input: ChatFlowInput): string => {
   const history = input.history ?? [];
@@ -68,9 +188,12 @@ const chat = ai.defineFlow(
     });
 
     const final = await response;
+    const text = final.text || '';
+    const ui = await generateUiSchema(input, text);
     return {
-      text: final.text || '',
+      text,
       model: modelName,
+      ui,
     };
   },
 );
@@ -96,9 +219,12 @@ const chatStream = ai.defineFlow(
     })();
 
     const final = await response;
+    const text = final.text || '';
+    const ui = await generateUiSchema(input, text);
     return {
-      text: final.text || '',
+      text,
       model: modelName,
+      ui,
     };
   },
 );

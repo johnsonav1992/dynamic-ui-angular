@@ -18,6 +18,7 @@ type ChatMessage = {
 type ChatApiResponse = {
   text: string;
   model?: string;
+  ui?: UISchema;
 };
 
 const flowBaseUrl =
@@ -278,13 +279,25 @@ export class AppComponent {
             ? {
                 ...msg,
                 content: aiText,
+                ui: aiText.trim() ? msg.ui : msg.ui,
               }
             : msg,
         ),
       ]);
     } catch {
       try {
-        const aiText = await fetchGeminiReply(userPrompt, snapshot);
+        const flowReply = await runFlow<ChatApiResponse>({
+          url: `${flowBaseUrl}/chat`,
+          input: {
+            prompt: userPrompt,
+            history: snapshot.map((item) => ({
+              role: item.role,
+              content: item.content,
+            })),
+          },
+        });
+
+        const aiText = flowReply.text;
 
         if (!aiText.trim()) {
           throw new Error('Empty flow response');
@@ -296,6 +309,7 @@ export class AppComponent {
               ? {
                   ...msg,
                   content: aiText,
+                  ui: flowReply.ui ?? msg.ui,
                 }
               : msg,
           ),
