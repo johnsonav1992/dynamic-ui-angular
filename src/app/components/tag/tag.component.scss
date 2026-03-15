@@ -1,0 +1,29 @@
+:host {
+  display: inline-block;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #ecfeff;
+  color: #155e75;
+  border: 1px solid #a5f3fc;
+}
+
+.tag--success {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #86efac;
+}
+
+.tag--warning {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fcd34d;
+}

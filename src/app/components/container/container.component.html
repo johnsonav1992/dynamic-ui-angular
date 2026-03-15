@@ -1,0 +1,11 @@
+<section
+  class="container"
+  [style.display]="layout().columns ? 'grid' : 'flex'"
+  [style.flex-direction]="layout().columns ? null : (layout().direction ?? 'column')"
+  [style.gap]="layout().gap ?? '0.75rem'"
+  [style.grid-template-columns]="gridTemplate()"
+>
+  @for (child of children(); track $index) {
+    <app-dynamic-renderer [node]="child" />
+  }
+</section>

@@ -1,0 +1,133 @@
+:host {
+  color-scheme: light;
+}
+
+.page {
+  min-height: 100dvh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  background: radial-gradient(circle at 15% 15%, #f0fdf4 0%, #dcfce7 35%, #f8fafc 100%);
+  font-family: 'Sora', 'Avenir Next', 'Segoe UI', sans-serif;
+}
+
+.panel {
+  width: min(640px, 100%);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #d1fae5;
+  border-radius: 1rem;
+  box-shadow: 0 16px 40px -28px rgba(21, 128, 61, 0.35);
+  padding: 1.25rem;
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #14532d;
+}
+
+.refresh {
+  appearance: none;
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.summary,
+.state {
+  margin: 0 0 1rem;
+  color: #14532d;
+}
+
+.state--error {
+  color: #b91c1c;
+}
+
+.chat {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bubble {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.8rem;
+  border-radius: 0.9rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.bubble--assistant {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.role {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.content {
+  margin: 0;
+  color: #0f172a;
+}
+
+.tools {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  width: 100%;
+  align-items: center;
+}
+
+.composer {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.6rem;
+}
+
+.composer__input {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 0.7rem;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+}
+
+.composer__input:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 1px;
+}
+
+.composer__send {
+  appearance: none;
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #f0fdf4;
+  border-radius: 0.7rem;
+  padding: 0.6rem 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.composer__send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

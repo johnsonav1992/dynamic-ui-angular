@@ -1,0 +1,51 @@
+:host {
+	--btn-bg-start: #14532d;
+	--btn-bg-end: #22c55e;
+	--btn-shadow: rgba(8, 47, 27, 0.35);
+	--btn-outline: rgba(34, 197, 94, 0.45);
+	display: inline-block;
+}
+
+.ui-button {
+	appearance: none;
+	border: 0;
+	border-radius: 999px;
+	padding: 0.8rem 1.4rem;
+	min-width: 10rem;
+	cursor: pointer;
+	background: linear-gradient(135deg, var(--btn-bg-start), var(--btn-bg-end));
+	box-shadow: 0 10px 24px -12px var(--btn-shadow);
+	color: #f7fee7;
+	font-family: 'Space Grotesk', 'Avenir Next', 'Segoe UI', sans-serif;
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+	transition: transform 160ms ease, box-shadow 220ms ease, filter 220ms ease;
+}
+
+.ui-button:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 14px 28px -14px var(--btn-shadow);
+	filter: saturate(1.08);
+}
+
+.ui-button:active {
+	transform: translateY(1px);
+}
+
+.ui-button:focus-visible {
+	outline: 3px solid var(--btn-outline);
+	outline-offset: 2px;
+}
+
+.ui-button__label {
+	display: inline-block;
+}
+
+@media (max-width: 600px) {
+	.ui-button {
+		width: 100%;
+		min-width: 0;
+	}
+}
