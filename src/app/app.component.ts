@@ -91,15 +91,15 @@ const chooseTree = (intent: AgentIntent): UISchema => {
     root: {
       type: 'container',
       layout: { direction: 'column', gap: '0.5rem' },
-      // children: [
-      //   {
-      //     type: 'tag',
-      //     inputs: {
-      //       text: 'Info',
-      //       tone: 'neutral',
-      //     },
-      //   },
-      // ],
+      children: [
+        {
+          type: 'tag',
+          inputs: {
+            text: 'Info',
+            tone: 'neutral',
+          },
+        },
+      ],
     },
   };
 };
@@ -144,26 +144,11 @@ const buildAssistantReply = (prompt: string): Omit<ChatMessage, 'id'> => {
   };
 };
 
-const fetchGeminiReply = async (prompt: string, history: ChatMessage[]): Promise<string> => {
-  const data = await runFlow<ChatApiResponse>({
-    url: `${flowBaseUrl}/chat`,
-    input: {
-      prompt,
-      history: history.map((item) => ({
-        role: item.role,
-        content: item.content,
-      })),
-    },
-  });
-
-  return data.text;
-};
-
 const streamGeminiReply = async (
   prompt: string,
   history: ChatMessage[],
   onChunk: (chunk: string) => void | Promise<void>,
-): Promise<string> => {
+): Promise<ChatApiResponse> => {
   const response = streamFlow<ChatApiResponse, string>({
     url: `${flowBaseUrl}/chatStream`,
     input: {
@@ -179,8 +164,7 @@ const streamGeminiReply = async (
     await onChunk(chunk);
   }
 
-  const output = await response.output;
-  return output.text;
+  return response.output;
 };
 
 @Component({
@@ -235,12 +219,11 @@ export class AppComponent {
         id: assistantId,
         role: 'assistant',
         content: '',
-        ui: chooseTree(intent),
       },
     ]);
 
     try {
-      const aiText = await streamGeminiReply(userPrompt, snapshot, (chunk) => {
+      const flowReply = await streamGeminiReply(userPrompt, snapshot, (chunk) => {
         return new Promise<void>((resolve) => {
           const chars = Array.from(chunk);
 
@@ -269,6 +252,8 @@ export class AppComponent {
         });
       });
 
+      const aiText = flowReply.text;
+
       if (!aiText.trim()) {
         throw new Error('Empty stream response');
       }
@@ -279,7 +264,7 @@ export class AppComponent {
             ? {
                 ...msg,
                 content: aiText,
-                ui: aiText.trim() ? msg.ui : msg.ui,
+                ui: flowReply.ui ?? chooseTree(intent),
               }
             : msg,
         ),
@@ -309,7 +294,7 @@ export class AppComponent {
               ? {
                   ...msg,
                   content: aiText,
-                  ui: flowReply.ui ?? msg.ui,
+                  ui: flowReply.ui ?? chooseTree(intent),
                 }
               : msg,
           ),

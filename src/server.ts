@@ -18,8 +18,19 @@ const browserDistFolder = resolve(serverDistFolder, '../browser');
 const app = express();
 const angularApp = new AngularNodeAppEngine();
 
-if (!process.env['GOOGLE_GENAI_API_KEY'] && process.env['GEMINI_API_KEY']) {
-  process.env['GOOGLE_GENAI_API_KEY'] = process.env['GEMINI_API_KEY'];
+const cleanEnvValue = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  return value.trim().replace(/^['"]|['"]$/g, '');
+};
+
+const geminiApiKey = cleanEnvValue(process.env['GEMINI_API_KEY']);
+const googleGenAiApiKey = cleanEnvValue(process.env['GOOGLE_GENAI_API_KEY']);
+
+if (geminiApiKey) {
+  process.env['GEMINI_API_KEY'] = geminiApiKey;
+  process.env['GOOGLE_GENAI_API_KEY'] = geminiApiKey;
+} else if (googleGenAiApiKey) {
+  process.env['GOOGLE_GENAI_API_KEY'] = googleGenAiApiKey;
 }
 
 const ai = genkit({ plugins: [googleAI()] });
@@ -60,6 +71,21 @@ const modelName = 'gemini-2.0-flash';
 
 const ALLOWED_TYPES = new Set(['container', 'tag', 'button']);
 
+const shouldGenerateUi = (prompt: string): boolean => {
+  const value = prompt.toLowerCase();
+  return [
+    'button',
+    'submit',
+    'publish',
+    'confirm',
+    'form',
+    'action',
+    'generate',
+    'create',
+    'next step',
+  ].some((keyword) => value.includes(keyword));
+};
+
 const extractJsonObject = (text: string): string | null => {
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
   if (fenced?.[1]) return fenced[1].trim();
@@ -73,20 +99,20 @@ const extractJsonObject = (text: string): string | null => {
 const sanitizeNode = (node: unknown, depth = 0): UINode | null => {
   if (!node || typeof node !== 'object' || depth > 8) return null;
   const candidate = node as Record<string, unknown>;
-  const type = typeof candidate.type === 'string' ? candidate.type : null;
+  const type = typeof candidate['type'] === 'string' ? candidate['type'] : null;
   if (!type || !ALLOWED_TYPES.has(type)) return null;
 
   const layout: LayoutConfig = {};
-  if (candidate.layout && typeof candidate.layout === 'object') {
-    const rawLayout = candidate.layout as Record<string, unknown>;
-    if (rawLayout.direction === 'row' || rawLayout.direction === 'column') {
-      layout.direction = rawLayout.direction;
+  if (candidate['layout'] && typeof candidate['layout'] === 'object') {
+    const rawLayout = candidate['layout'] as Record<string, unknown>;
+    if (rawLayout['direction'] === 'row' || rawLayout['direction'] === 'column') {
+      layout.direction = rawLayout['direction'];
     }
-    if (typeof rawLayout.gap === 'string') {
-      layout.gap = rawLayout.gap;
+    if (typeof rawLayout['gap'] === 'string') {
+      layout.gap = rawLayout['gap'];
     }
-    if (typeof rawLayout.columns === 'number' && Number.isFinite(rawLayout.columns)) {
-      layout.columns = Math.max(1, Math.min(4, Math.floor(rawLayout.columns)));
+    if (typeof rawLayout['columns'] === 'number' && Number.isFinite(rawLayout['columns'])) {
+      layout.columns = Math.max(1, Math.min(4, Math.floor(rawLayout['columns'])));
     }
   }
 
@@ -94,16 +120,16 @@ const sanitizeNode = (node: unknown, depth = 0): UINode | null => {
     type,
   };
 
-  if (candidate.inputs && typeof candidate.inputs === 'object') {
-    sanitized.inputs = candidate.inputs as Record<string, unknown>;
+  if (candidate['inputs'] && typeof candidate['inputs'] === 'object') {
+    sanitized.inputs = candidate['inputs'] as Record<string, unknown>;
   }
 
   if (Object.keys(layout).length > 0) {
     sanitized.layout = layout;
   }
 
-  if (Array.isArray(candidate.children)) {
-    const children = candidate.children
+  if (Array.isArray(candidate['children'])) {
+    const children = candidate['children']
       .map((child) => sanitizeNode(child, depth + 1))
       .filter((value): value is UINode => value !== null);
     if (children.length > 0) sanitized.children = children;
@@ -114,11 +140,35 @@ const sanitizeNode = (node: unknown, depth = 0): UINode | null => {
 
 const sanitizeSchema = (value: unknown): UISchema | undefined => {
   if (!value || typeof value !== 'object') return undefined;
-  const root = sanitizeNode((value as Record<string, unknown>).root);
+  const root = sanitizeNode((value as Record<string, unknown>)['root']);
   return root ? { root } : undefined;
 };
 
+const normalizeAssistantText = (text: string): string => {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+
+  const jsonText = extractJsonObject(trimmed);
+  if (jsonText) {
+    try {
+      const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+      if (typeof parsed['response'] === 'string' && parsed['response'].trim()) {
+        return parsed['response'].trim();
+      }
+    } catch {
+      // Ignore parse errors and keep fallback behavior.
+    }
+  }
+
+  const withoutFences = trimmed.replace(/```json[\s\S]*?```/gi, '').trim();
+  return withoutFences || trimmed;
+};
+
 const generateUiSchema = async (input: ChatFlowInput, assistantText: string): Promise<UISchema | undefined> => {
+  if (!shouldGenerateUi(input.prompt)) {
+    return undefined;
+  }
+
   const history = input.history ?? [];
   const historyText = history
     .slice(-6)
@@ -168,6 +218,8 @@ const toPrompt = (input: ChatFlowInput): string => {
 
   return [
     'You are a helpful assistant. Keep responses concise and clear.',
+    'Return plain conversational text only.',
+    'Do not return JSON, markdown code fences, or component arrays in this response.',
     historyText ? `Conversation so far:\n${historyText}` : '',
     `User: ${input.prompt}`,
     'Assistant:',
@@ -188,7 +240,7 @@ const chat = ai.defineFlow(
     });
 
     const final = await response;
-    const text = final.text || '';
+    const text = normalizeAssistantText(final.text || '');
     const ui = await generateUiSchema(input, text);
     return {
       text,
@@ -219,7 +271,7 @@ const chatStream = ai.defineFlow(
     })();
 
     const final = await response;
-    const text = final.text || '';
+    const text = normalizeAssistantText(final.text || '');
     const ui = await generateUiSchema(input, text);
     return {
       text,
@@ -320,6 +372,9 @@ app.use('/**', (req, res, next) => {
  */
 if (isMainModule(import.meta.url)) {
   const port = process.env['PORT'] || 4000;
+  const source = geminiApiKey ? 'GEMINI_API_KEY' : googleGenAiApiKey ? 'GOOGLE_GENAI_API_KEY' : 'none';
+  const activeKey = process.env['GOOGLE_GENAI_API_KEY'];
+  console.log(`Genkit key source: ${source} (len=${activeKey?.length ?? 0})`);
   app.listen(port, () => {
     console.log(`Node Express server listening on http://localhost:${port}`);
   });
